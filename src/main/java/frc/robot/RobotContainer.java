@@ -54,15 +54,6 @@ public class RobotContainer {
     mSwerveDrive.setDefaultCommand(mDefaultDrive); // Preference moment
     // mSwerveDrive.setDefaultCommand(mFlickStickDrive);
 
-    mDriverController.a().whileTrue( // Rotate Swerve to zero radians
-      new RotateSwerveToDrive(
-        mSwerveDrive,
-        () -> mDriverController.getLeftStickY(),
-        () -> mDriverController.getLeftStickX(),
-        () -> 0.0
-      )
-    );
-
     configureBindings();
   }
 
@@ -76,7 +67,14 @@ public class RobotContainer {
    * joysticks}.
    */
   private void configureBindings() {
-
+    mDriverController.a().whileTrue( // Rotate Swerve to zero radians
+      new RotateSwerveToDrive(
+        mSwerveDrive,
+        () -> mDriverController.getLeftStickY(),
+        () -> mDriverController.getLeftStickX(),
+        () -> 0.0
+      )
+    );
   }
 
   /**
