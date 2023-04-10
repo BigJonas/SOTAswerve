@@ -15,6 +15,9 @@ import edu.wpi.first.math.controller.SimpleMotorFeedforward;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
+import edu.wpi.first.math.trajectory.TrapezoidProfile.Constraints;
+import edu.wpi.first.math.trajectory.TrapezoidProfile.State;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -44,9 +47,13 @@ public class SwerveModule extends SubsystemBase {
   private final RelativeEncoder mAngleEncoder;
   private final AnalogInput mAnalogInput;
   private final SparkMaxPIDController mAnglePID; // Measurement in Radians
+  private final Constraints mAngleConstraints;
+  private final SimpleMotorFeedforward mAngleFF; // Characterize in RPS (still goofy)
 
   private SwerveModuleState mState;
   private SwerveModuleState mLastState;
+
+  private TrapezoidProfile mAngleProfile;
 
   private double mSpeedGearRatio;
   private double mLastSpeedGearRatio;
@@ -62,14 +69,20 @@ public class SwerveModule extends SubsystemBase {
 
     mSpeedMotor = speedMotor;
     mSpeedEncoder = mSpeedMotor.getEncoder();
+
     mSpeedPID = mSpeedMotor.getPIDController();
     mSpeedFF = new SimpleMotorFeedforward(0.0, 0.0, 0.0); // TODO: make constants and tune
 
     mAngleMotor = angleMotor;
     mAngleEncoder = mAngleMotor.getEncoder();
     mAnalogInput = analogInput;
-    mAnglePID = mAngleMotor.getPIDController();
 
+    mAnglePID = mAngleMotor.getPIDController();
+    mAngleConstraints = new Constraints(0.0, 0.0); // TODO: blah blah get constants
+    mAngleProfile = new TrapezoidProfile(mAngleConstraints, new State());
+    mAngleFF = new SimpleMotorFeedforward(0.0, 0.0, 0.0); // TODO: guess whhat make constants
+
+    kOffset = 0.0; //TODO: make constants
     mSpeedGearRatio = 0.0; // TODO: make constants
 
     configPIDControllers();
@@ -86,6 +99,12 @@ public class SwerveModule extends SubsystemBase {
     if (Math.abs(mState.speedMetersPerSecond) <= mMaxWheelSpeed * 0.01) {
       mState.angle = mLastState.angle;
     }
+    
+    mAngleProfile = new TrapezoidProfile(
+      mAngleConstraints, 
+      new State(mState.angle.getRadians(), 0.0), 
+      new State(getAngle(), getAngleVelocity())
+    );
   }
 
   /**
@@ -148,6 +167,14 @@ public class SwerveModule extends SubsystemBase {
    */
   public Rotation2d getRotation() {
     return new Rotation2d(getAngle());
+  }
+
+  /**
+   * Gets the angle velocity of the module
+   * @return Angle velocity of the module
+   */
+  public double getAngleVelocity() {
+    return mAngleEncoder.getVelocity();
   }
 
   /**
@@ -265,7 +292,8 @@ public class SwerveModule extends SubsystemBase {
     }
     // Currently not using PID Slot would like to in edge cases 
     mSpeedPID.setReference(mState.speedMetersPerSecond, ControlType.kVelocity, 0, mSpeedFF.calculate(mState.speedMetersPerSecond));
-    mAnglePID.setReference(mState.angle.getRadians(), ControlType.kPosition, 0);
+    // For the feedforward it gets the setpoint at the time the PID updates functionally the same how hayden coded it
+    mAnglePID.setReference(mState.angle.getRadians(), ControlType.kPosition, 0, mAngleFF.calculate(mAngleProfile.calculate(0.001).velocity));
 
     mLastSpeedGearRatio = mSpeedGearRatio;
     mLastState = mState;
