@@ -15,14 +15,25 @@ import edu.wpi.first.math.controller.SimpleMotorFeedforward;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.util.Conversion;
 
-import static frc.robot.Constants.Swerve.*;
 import static frc.robot.Constants.AnalogInput.*;
 
+/**
+ * Swerve Module using Neos for Drive and Angling
+ */
 public class SwerveModule extends SubsystemBase {
+
+  /**
+   * 0 Front left
+   * 1 Front right
+   * 2 Back left
+   * 3 Back right
+   */
+  private final int mModuleNum; 
 
   private final CANSparkMax mSpeedMotor;
   private final RelativeEncoder mSpeedEncoder;
@@ -40,11 +51,15 @@ public class SwerveModule extends SubsystemBase {
   private double mSpeedGearRatio;
   private double mLastSpeedGearRatio;
 
+  private double mAngleGearRatio; // Doesnt need mLastAngleGearRatio however who knows
+
   private double kOffset;
   private double mMaxWheelSpeed;
 
   /** Creates a new SwerveModule. */
   public SwerveModule(CANSparkMax speedMotor, CANSparkMax angleMotor, AnalogInput analogInput) {
+    mModuleNum = 0; // TODO: make constants
+
     mSpeedMotor = speedMotor;
     mSpeedEncoder = mSpeedMotor.getEncoder();
     mSpeedPID = mSpeedMotor.getPIDController();
@@ -66,7 +81,7 @@ public class SwerveModule extends SubsystemBase {
    * @param desiredState Desired state of the swerve module
    */
   public void setState(SwerveModuleState desiredState) {
-    mState = SwerveModuleState.optimize(desiredState, getAngle());
+    mState = SwerveModuleState.optimize(desiredState, getRotation());
     // Dont change angle when speed is less than 1 percent
     if (Math.abs(mState.speedMetersPerSecond) <= mMaxWheelSpeed * 0.01) {
       mState.angle = mLastState.angle;
@@ -80,7 +95,7 @@ public class SwerveModule extends SubsystemBase {
   public SwerveModuleState getState() {
     return new SwerveModuleState(
       getSpeed(),
-      getAngle()
+      getRotation()
     );
   }
 
@@ -91,7 +106,7 @@ public class SwerveModule extends SubsystemBase {
   public SwerveModulePosition getPosition() {
     return new SwerveModulePosition(
       getDistance(),
-      getAngle()
+      getRotation()
     );
   }
 
@@ -121,10 +136,18 @@ public class SwerveModule extends SubsystemBase {
 
   /**
    * Get angle of the module
-   * @return Angle of the module
+   * @return Angle of the module (Radians)
    */
-  public Rotation2d getAngle() {
-    return new Rotation2d(mAngleEncoder.getPosition());
+  public double getAngle() {
+    return mAngleEncoder.getPosition();
+  }
+
+  /**
+   * Gets the rotation of the module
+   * @return Rotation of the module
+   */
+  public Rotation2d getRotation() {
+    return new Rotation2d(getAngle());
   }
 
   /**
@@ -159,29 +182,46 @@ public class SwerveModule extends SubsystemBase {
    * Config encoders to default state
    */
   private void configEncoders() {
-    updateSpeedEncoder();
-    mSpeedEncoder.setPosition(0.0);
+    updateSpeedConversionFactor();
+    resetSpeedEncoder();
 
-    mAngleEncoder.setPositionConversionFactor(0.0); // TODO: Convert to Radians
-    mAngleEncoder.setVelocityConversionFactor(0.0); // TODO: Convert to Radians Per Second
-    updateAngleEncoder();
+    updateAngleConversionFactor();
+    resetAngleEncoder();
   }
 
   /**
-   * Updates the encoder on the SparkMax with the current gear ratio
-   * Our team is silly and likes to change speed gear ratios 
+   * Updates the conversion factor on the SparkMax with the current speed gear ratio
+   * Our team is silly and likes to change speed gear ratios   
    */
-  private void updateSpeedEncoder() { 
-    double rotationToMeters = WHEEL_CIRCUMFERENCE / mSpeedGearRatio; // TODO: maybe extract this to something else 
-    double rpmPerMetersToSecond = rotationToMeters / 60.0;
+  private void updateSpeedConversionFactor() {
+    double rotationToMeters = Conversion.getNeoRotationToMeters(mSpeedGearRatio); 
+    double rpmToMetersPerSecond = rotationToMeters / 60.0;
     mSpeedEncoder.setPositionConversionFactor(rotationToMeters);
-    mSpeedEncoder.setVelocityConversionFactor(rpmPerMetersToSecond);
+    mSpeedEncoder.setVelocityConversionFactor(rpmToMetersPerSecond);
+  }
+
+  /**
+   * Reset speed encoder
+   */
+  private void resetSpeedEncoder() {
+    mSpeedEncoder.setPosition(0.0);
+  }
+
+  /**
+   * Updates the conversion factor on the SparkMax with the current angle gear ratio
+   * Dont think this is all too useful but it follows what is done with the speed so :)
+   */
+  private void updateAngleConversionFactor() {
+    double rotationToRadians = Conversion.getNeoRotationToMeters(mAngleGearRatio); 
+    double rpmToRadiansPerSecond = rotationToRadians / 60.0;
+    mAngleEncoder.setPositionConversionFactor(rotationToRadians);
+    mAngleEncoder.setVelocityConversionFactor(rpmToRadiansPerSecond);
   }
 
   /**
    * Updates the encoder on the SparkMax with the value on the AnalogEncoder
    */
-  private void updateAngleEncoder() {
+  private void resetAngleEncoder() {
     mAngleEncoder.setPosition(Conversion.analogInputToRadians(getAnalogInput()));
   }
 
@@ -192,6 +232,16 @@ public class SwerveModule extends SubsystemBase {
     mState.speedMetersPerSecond = 0.0;
   }
 
+  @Override
+  public void initSendable(SendableBuilder builder) {
+    builder.setSmartDashboardType("Swerve Module " + mModuleNum);
+
+    builder.addDoubleProperty("Angle (Degrees)", getRotation()::getDegrees, null);
+    builder.addDoubleProperty("Meters Per Second", mSpeedEncoder::getVelocity, null);
+    builder.addDoubleProperty("No Offset", this::getAnalogInput, null);
+    builder.addDoubleProperty("Current Speed Gear Ratio", () -> mSpeedGearRatio, null);
+  }
+
   /**
    * Motor pids are set in periodic so MAKE SURE to disable
    */
@@ -199,10 +249,12 @@ public class SwerveModule extends SubsystemBase {
   public void periodic() {
     // This method will be called once per scheduler run
     if (mLastSpeedGearRatio != mSpeedGearRatio) {
-      updateSpeedEncoder();
+      updateSpeedConversionFactor();;
     }
-    updateAngleEncoder(); // TODO: Dont really want this running every 20ms for usage 
-
+    // If the drift between the Spark encoder and the absolute encoder is greater than 1 percent then reset 
+    if (Math.abs(getAngle() - Conversion.analogInputToRadians(getAnalogInput())) < ((2 * Math.PI) * 0.01)) {
+      resetAngleEncoder(); 
+    }
     // Currently not using PID Slot would like to in edge cases 
     mSpeedPID.setReference(mState.speedMetersPerSecond, ControlType.kVelocity, 0, mSpeedFF.calculate(mState.speedMetersPerSecond));
     mAnglePID.setReference(mState.angle.getRadians(), ControlType.kPosition, 0);

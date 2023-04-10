@@ -7,13 +7,15 @@ package frc.robot.subsystems.Swerve;
 import com.kauailabs.navx.frc.AHRS;
 
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
+import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 
 /**
- * Shifting swerve class that extends all the functionality for swerve but has a shifter 
- * and changes the modules gear ratios
- * Supports two gear ratios
+ * Shifting swerve drive
+ * Retains functionality of swerve class but with
+ * the ability to shift between two speed gear ratios
+ * See {@link SwerveDrive} to find important drive code
  */
 public class ShiftingSwerveDrive extends SwerveDrive {
   private final DoubleSolenoid mShifter;
@@ -36,8 +38,14 @@ public class ShiftingSwerveDrive extends SwerveDrive {
     } 
   }
 
-  @Override
-  public void periodic() {
-    // This method will be called once per scheduler run
+  public int getGear() {
+    return mShifter.get() == Value.kForward ? 1 : 0;
   }
+
+  
+  public void initSendable(SendableBuilder builder) {
+    super.initSendable(builder);
+    builder.addBooleanProperty("Current Gear", () -> getGear() == 1 ? true : false , null);
+  } 
+
 }

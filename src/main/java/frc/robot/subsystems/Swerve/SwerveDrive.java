@@ -17,9 +17,20 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
+/**
+ * Basic swerve drive 
+ * NOTE:
+ * MUST DECLARE MODULES AND KINEMATICS WITH THE ORDER
+ * FRONT LEFT, FRONT RIGHT, BACK LEFT, BACK RIGHT
+ * If you plan on using the Pose Estimator feature with vision
+ * You must call {@link SwerveDrive#resetOdometry() resetOdometry}
+ * on start with an auto initial pose
+ */
 public class SwerveDrive extends SubsystemBase {
   protected final SwerveModule[] mModules;
   private final AHRS mGyro;
@@ -31,12 +42,19 @@ public class SwerveDrive extends SubsystemBase {
   private final ProfiledPIDController mStrTranslationController;
   private final ProfiledPIDController mRotTranslationController;
 
+  private final Field2d mField;
+
   private boolean mFieldCentricActive;
   private double mMaxWheelSpeed;
   private double mMaxAngularVelocity;
   private Translation2d mPointOfRotation;
 
-  /** Creates a new Swerve. */
+  /**
+   * A basic swerve drive 
+   * @param modules Swerve modules (order Front Left, Front Right, Back Left, Back Right)
+   * @param gyro Gyro
+   * @param kinematics Swerve kinematics (order Front Left, Front Right, Back Left, Back Right)
+   */
   public SwerveDrive(SwerveModule[] modules, AHRS gyro, SwerveDriveKinematics kinematics) {
     mModules = modules;
     mGyro = gyro;
@@ -49,7 +67,10 @@ public class SwerveDrive extends SubsystemBase {
     mStrTranslationController = new ProfiledPIDController(0.0, 0.0, 0.0, null);
     mRotTranslationController = new ProfiledPIDController(0.0, 0.0, 0.0, null);
 
+    mField = new Field2d();
+
     mPointOfRotation = new Translation2d(); // Default is 0.0
+
   }
 
   /**
@@ -159,6 +180,7 @@ public class SwerveDrive extends SubsystemBase {
    */
   public void resetOdometry(Pose2d initPose) {
     mOdometry.resetPosition(getRotation2d(), getModulePosition(), initPose);
+    mField.setRobotPose(initPose);
     mOdometryTimer.reset();
     mOdometryTimer.start();
   }
@@ -262,10 +284,20 @@ public class SwerveDrive extends SubsystemBase {
   }
 
   @Override
+  public void initSendable(SendableBuilder builder) {
+    builder.setSmartDashboardType("Swerve Drive");
+
+    builder.addStringProperty("Current Command", super.getCurrentCommand()::getName, null);
+    builder.addBooleanProperty("Field Centric Active", this::getFieldCentric, null);
+    builder.addDoubleProperty("Gyro Angle (radians)", this::getYaw, null);
+    
+  } 
+
+  @Override
   public void periodic() {
     // This method will be called once per scheduler run
     updateOdometry();
-
+    mField.setRobotPose(getPose2d());
 
   }
 }
