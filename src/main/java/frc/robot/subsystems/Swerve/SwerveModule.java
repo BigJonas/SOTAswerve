@@ -159,6 +159,14 @@ public class SwerveModule extends SubsystemBase {
   }
 
   /**
+   * Gets the analog input without offset
+   * @return Analog input without offset
+   */
+  public double getAnalogInputNoOffset() {
+    return mAnalogInput.getAverageVoltage();
+  }
+
+  /**
    * Config PID controllers to default state
    */
   private void configPIDControllers() {
@@ -238,7 +246,7 @@ public class SwerveModule extends SubsystemBase {
 
     builder.addDoubleProperty("Angle (Degrees)", getRotation()::getDegrees, null);
     builder.addDoubleProperty("Meters Per Second", mSpeedEncoder::getVelocity, null);
-    builder.addDoubleProperty("No Offset", this::getAnalogInput, null);
+    builder.addDoubleProperty("No Offset", this::getAnalogInputNoOffset, null);
     builder.addDoubleProperty("Current Speed Gear Ratio", () -> mSpeedGearRatio, null);
   }
 
