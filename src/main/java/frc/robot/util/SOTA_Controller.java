@@ -27,7 +27,7 @@ public interface SOTA_Controller {
     default double getLeftStickAngle() {
         double x = getLeftStickX();
         double y = -getLeftStickY();
-        return Math.atan2(y, x);
+        return Math.atan2(y, x) + 90;
     }
     default Rotation2d getLeftStickRotation() {
         return new Rotation2d(getLeftStickAngle());
@@ -42,7 +42,7 @@ public interface SOTA_Controller {
     default double getRightStickAngle() {
         double x = getRightStickX();
         double y = -getRightStickY();
-        return Math.atan2(y, x);
+        return Math.atan2(y, x) + 90;
     }
     default Rotation2d getRightStickRotation() {
         return new Rotation2d(getLeftStickAngle());

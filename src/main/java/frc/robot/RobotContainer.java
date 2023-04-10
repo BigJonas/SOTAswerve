@@ -5,6 +5,12 @@
 package frc.robot;
 
 import frc.robot.Constants.OperatorConstants;
+import frc.robot.commands.DefaultDrive;
+import frc.robot.commands.FlickStickDrive;
+import frc.robot.commands.RotateSwerveToDrive;
+import frc.robot.subsystems.Swerve.SwerveDrive;
+import frc.robot.util.SOTA_Controller;
+import frc.robot.util.SOTA_XboxController;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -17,15 +23,46 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
  */
 public class RobotContainer {
   // The robot's subsystems and commands are defined here...
-  // private final Swerve mSwerveDrive;
+  private final SwerveDrive mSwerveDrive;
 
-  // Replace with CommandPS4Controller or CommandJoystick if needed
-  private final CommandXboxController m_driverController =
-      new CommandXboxController(OperatorConstants.kDriverControllerPort);
+  private final DefaultDrive mDefaultDrive;
+  private final FlickStickDrive mFlickStickDrive;
+
+  private final SOTA_Controller mDriverController =
+    new SOTA_XboxController(OperatorConstants.kDriverControllerPort);
 
   /** The container for the robot. Contains subsystems, OI devices, and commands. */
   public RobotContainer() {
-    // Configure the trigger bindings
+    mSwerveDrive = new SwerveDrive(null, null, null); // TODO: make a swerve module factory or something silly like that
+
+    // Examples of default drive and flick stick drive implementations 
+    mDefaultDrive = new DefaultDrive(
+      mSwerveDrive, 
+      () -> mDriverController.getLeftStickY(),
+      () -> mDriverController.getLeftStickX(),
+      () -> mDriverController.getRightStickX()
+    );
+    mFlickStickDrive = new FlickStickDrive(
+      mSwerveDrive,
+      () -> mDriverController.getLeftStickY(), 
+      () -> mDriverController.getLeftStickX(),
+      () -> mDriverController.getRightStickAngle(),
+      () -> mDriverController.getRightStickPower()
+    );
+
+    // Config default commands
+    mSwerveDrive.setDefaultCommand(mDefaultDrive); // Preference moment
+    // mSwerveDrive.setDefaultCommand(mFlickStickDrive);
+
+    mDriverController.a().whileTrue( // Rotate Swerve to zero radians
+      new RotateSwerveToDrive(
+        mSwerveDrive,
+        () -> mDriverController.getLeftStickY(),
+        () -> mDriverController.getLeftStickX(),
+        () -> 0.0
+      )
+    );
+
     configureBindings();
   }
 
