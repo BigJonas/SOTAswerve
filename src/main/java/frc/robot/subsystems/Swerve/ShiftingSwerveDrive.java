@@ -31,6 +31,10 @@ public class ShiftingSwerveDrive extends SwerveDrive {
     kGearRatios[1] = 0.0;
   }
 
+  /**
+   * Changes the gear of the drive train 
+   * @param gear Desired gear of the drive train 0 is low 1 is high
+   */
   public void shift(int gear) {
     mShifter.set(gear == 1 ? Value.kForward : Value.kReverse); // TODO: Maybe make constants for this idk
     for (int i = 0; i < super.mModules.length; i++) {
@@ -38,6 +42,10 @@ public class ShiftingSwerveDrive extends SwerveDrive {
     } 
   }
 
+  /**
+   * Gets the gear of the drive train
+   * @return Gear of the drive train 0 is low 1 is high
+   */
   public int getGear() {
     return mShifter.get() == Value.kForward ? 1 : 0;
   }

@@ -50,10 +50,7 @@ public class SwerveModule extends SubsystemBase {
   private final Constraints mAngleConstraints;
   private final SimpleMotorFeedforward mAngleFF; // Characterize in RPS (still goofy)
 
-  private SwerveModuleState mState;
-  private SwerveModuleState mLastState;
-
-  private TrapezoidProfile mAngleProfile;
+  private Rotation2d mLastAngle;
 
   private double mSpeedGearRatio;
   private double mLastSpeedGearRatio;
@@ -79,11 +76,11 @@ public class SwerveModule extends SubsystemBase {
 
     mAnglePID = mAngleMotor.getPIDController();
     mAngleConstraints = new Constraints(0.0, 0.0); // TODO: blah blah get constants
-    mAngleProfile = new TrapezoidProfile(mAngleConstraints, new State());
     mAngleFF = new SimpleMotorFeedforward(0.0, 0.0, 0.0); // TODO: guess whhat make constants
 
     kOffset = 0.0; //TODO: make constants
     mSpeedGearRatio = 0.0; // TODO: make constants
+
 
     configPIDControllers();
     configEncoders();
@@ -94,16 +91,48 @@ public class SwerveModule extends SubsystemBase {
    * @param desiredState Desired state of the swerve module
    */
   public void setState(SwerveModuleState desiredState) {
-    mState = SwerveModuleState.optimize(desiredState, getRotation());
+    desiredState = SwerveModuleState.optimize(desiredState, getRotation());
     // Dont change angle when speed is less than 1 percent
-    if (Math.abs(mState.speedMetersPerSecond) <= mMaxWheelSpeed * 0.01) {
-      mState.angle = mLastState.angle;
+    if (Math.abs(desiredState.speedMetersPerSecond) <= mMaxWheelSpeed * 0.01) {
+      desiredState.angle = mLastAngle;
     }
-    
-    mAngleProfile = new TrapezoidProfile(
+    setSpeed(desiredState.speedMetersPerSecond);
+    setAngle(desiredState.angle.getRadians());
+
+    mLastAngle = desiredState.angle;
+  }
+
+  /**
+   * Sets the speed of the module meters per second
+   * @param metersPerSecond
+   */
+  public void setSpeed(double metersPerSecond) {
+    // Currently not using PID Slot would like to in edge cases 
+    mSpeedPID.setReference(
+      metersPerSecond,
+      ControlType.kVelocity,
+      0, 
+      mSpeedFF.calculate(metersPerSecond)
+    );
+  }
+
+  /**
+   * Sets the state of the module with 
+   * @param positionProfile Position profile
+   */
+  public void setAngle(double radians) {
+    TrapezoidProfile positionProfile = new TrapezoidProfile(
       mAngleConstraints, 
-      new State(mState.angle.getRadians(), 0.0), 
+      new State(radians, 0.0), 
       new State(getAngle(), getAngleVelocity())
+    );
+    State angleState = positionProfile.calculate(0.0001); // Gets the velocity setpoint for the next Spark PID update
+    // For the feedforward it gets the setpoint at the time the PID updates functionally the same how hayden coded it
+    mAnglePID.setReference(
+      radians, 
+      ControlType.kPosition, 
+      0, 
+      mAngleFF.calculate(angleState.velocity)
     );
   }
 
@@ -264,7 +293,8 @@ public class SwerveModule extends SubsystemBase {
    * Disables the module 
    */
   public void disable() {
-    mState.speedMetersPerSecond = 0.0;
+    mSpeedMotor.set(0.0);
+    mAngleMotor.set(0.0);
   }
 
   @Override
@@ -284,18 +314,13 @@ public class SwerveModule extends SubsystemBase {
   public void periodic() {
     // This method will be called once per scheduler run
     if (mLastSpeedGearRatio != mSpeedGearRatio) {
-      updateSpeedConversionFactor();;
+      updateSpeedConversionFactor();
     }
     // If the drift between the Spark encoder and the absolute encoder is greater than 1 percent then reset 
     if (Math.abs(getAngle() - Conversion.analogInputToRadians(getAnalogInput())) < ((2 * Math.PI) * 0.01)) {
       resetAngleEncoder(); 
     }
-    // Currently not using PID Slot would like to in edge cases 
-    mSpeedPID.setReference(mState.speedMetersPerSecond, ControlType.kVelocity, 0, mSpeedFF.calculate(mState.speedMetersPerSecond));
-    // For the feedforward it gets the setpoint at the time the PID updates functionally the same how hayden coded it
-    mAnglePID.setReference(mState.angle.getRadians(), ControlType.kPosition, 0, mAngleFF.calculate(mAngleProfile.calculate(0.001).velocity));
 
     mLastSpeedGearRatio = mSpeedGearRatio;
-    mLastState = mState;
   }
 }
