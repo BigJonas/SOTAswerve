@@ -38,8 +38,9 @@ public class ShiftingSwerveDrive extends SwerveDrive {
   public void shift(int gear) {
     mShifter.set(gear == 1 ? Value.kForward : Value.kReverse); // TODO: Maybe make constants for this idk
     for (int i = 0; i < super.mModules.length; i++) {
-      super.mModules[i].setSpeedGearRatio(kGearRatios[i]);
-    } 
+      super.mModules[i].setSpeedGearRatio(kGearRatios[gear]);
+    }
+    mSpeedGearRatio = kGearRatios[gear];
   }
 
   /**

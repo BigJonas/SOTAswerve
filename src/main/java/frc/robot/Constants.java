@@ -25,11 +25,15 @@ public final class Constants {
   }
 
   public static class Swerve {
+    public static final double TRACK_WIDTH = 0.0;
+    public static final double WHEEL_BASE = 0.0;
+
     public static final double WHEEL_DIAMETER = Conversion.inchesToMeters(4.0);
     public static final double WHEEL_CIRCUMFERENCE = WHEEL_DIAMETER * Math.PI;
   }
 
   public static class Neo {
     public static final double COUNTS_PER_REVOLUTION = 48.0;
+    public static final double FREE_SPEED = 5820;
   }
 }

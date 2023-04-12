@@ -21,7 +21,6 @@ import edu.wpi.first.math.trajectory.TrapezoidProfile.State;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.robot.util.Conversion;
 
 import static frc.robot.Constants.AnalogInput.*;
 
@@ -40,17 +39,17 @@ public class SwerveModule extends SubsystemBase {
 
   private final CANSparkMax mSpeedMotor;
   private final RelativeEncoder mSpeedEncoder;
+
   private final SparkMaxPIDController mSpeedPID; // Measurement in Meters Per Seconds
   private final SimpleMotorFeedforward mSpeedFF; // HAVE TO CHARACTERIZE IN MPS (GOOFY)
 
   private final CANSparkMax mAngleMotor;
   private final RelativeEncoder mAngleEncoder;
   private final AnalogInput mAnalogInput;
-  private final SparkMaxPIDController mAnglePID; // Measurement in Radians
-  private final Constraints mAngleConstraints;
-  private final SimpleMotorFeedforward mAngleFF; // Characterize in RPS (still goofy)
 
-  private Rotation2d mLastAngle;
+  private final SparkMaxPIDController mAnglePID; // Measurement in Radians
+  private final Constraints mAngleConstraints; // Constraints used in creating trapezoid profiles
+  private final SimpleMotorFeedforward mAngleFF; // Characterize in RPS (still goofy)
 
   private double mSpeedGearRatio;
   private double mLastSpeedGearRatio;
@@ -58,7 +57,6 @@ public class SwerveModule extends SubsystemBase {
   private double mAngleGearRatio; // Doesnt need mLastAngleGearRatio however who knows
 
   private double kOffset;
-  private double mMaxWheelSpeed;
 
   /** Creates a new SwerveModule. */
   public SwerveModule(CANSparkMax speedMotor, CANSparkMax angleMotor, AnalogInput analogInput) {
@@ -78,9 +76,10 @@ public class SwerveModule extends SubsystemBase {
     mAngleConstraints = new Constraints(0.0, 0.0); // TODO: blah blah get constants
     mAngleFF = new SimpleMotorFeedforward(0.0, 0.0, 0.0); // TODO: guess whhat make constants
 
-    kOffset = 0.0; //TODO: make constants
     mSpeedGearRatio = 0.0; // TODO: make constants
-
+    mLastSpeedGearRatio = mSpeedGearRatio;
+    mAngleGearRatio = 0.0; // TODO: make constants
+    kOffset = 0.0; //TODO: make constants
 
     configPIDControllers();
     configEncoders();
@@ -93,13 +92,30 @@ public class SwerveModule extends SubsystemBase {
   public void setState(SwerveModuleState desiredState) {
     desiredState = SwerveModuleState.optimize(desiredState, getRotation());
     // Dont change angle when speed is less than 1 percent
-    if (Math.abs(desiredState.speedMetersPerSecond) <= mMaxWheelSpeed * 0.01) {
-      desiredState.angle = mLastAngle;
-    }
+    // Extracted into LazySwerveModuleState
+    // if (Math.abs(desiredState.speedMetersPerSecond) <= getMaxWheelSpeed() * 0.01) {
+    //   desiredState.angle = mLastAngle;
+    // }
     setSpeed(desiredState.speedMetersPerSecond);
     setAngle(desiredState.angle.getRadians());
 
-    mLastAngle = desiredState.angle;
+  }
+
+  /**
+   * Sets the voltage of the Speed motor and forces it straight
+   * @param voltage Voltage of the motor
+   */
+  public void setCharacterizationSpeedVoltage(double voltage) {
+    mSpeedMotor.setVoltage(voltage);
+    setAngle(0.0);
+  }
+
+  /**
+   * Sets the voltage of the Angle motor
+   * @param voltage Voltage of the motor
+   */
+  public void setCharacterizationAngleVoltage(double voltage) {
+    mAngleMotor.setVoltage(voltage);
   }
 
   /**
@@ -129,7 +145,7 @@ public class SwerveModule extends SubsystemBase {
     State angleState = positionProfile.calculate(0.0001); // Gets the velocity setpoint for the next Spark PID update
     // For the feedforward it gets the setpoint at the time the PID updates functionally the same how hayden coded it
     mAnglePID.setReference(
-      radians, 
+      radians,  // Consider using angleState.position for adhering more to Trapezoid profile, testing required
       ControlType.kPosition, 
       0, 
       mAngleFF.calculate(angleState.velocity)
@@ -157,6 +173,8 @@ public class SwerveModule extends SubsystemBase {
       getRotation()
     );
   }
+
+
 
   /**
    * Sets the speed gear ratio
@@ -211,7 +229,7 @@ public class SwerveModule extends SubsystemBase {
    * @return Analog input for the module
    */
   public double getAnalogInput() {
-    return -1 * MathUtil.inputModulus(mAnalogInput.getAverageVoltage() - kOffset, 0.0, COUNTS_PER_REVOLUTION) + COUNTS_PER_REVOLUTION;
+    return -1 * MathUtil.inputModulus(getAnalogInputNoOffset() - kOffset, 0.0, COUNTS_PER_REVOLUTION) + COUNTS_PER_REVOLUTION;
   }
 
   /**
@@ -258,7 +276,7 @@ public class SwerveModule extends SubsystemBase {
    * Our team is silly and likes to change speed gear ratios   
    */
   private void updateSpeedConversionFactor() {
-    double rotationToMeters = Conversion.getNeoRotationToMeters(mSpeedGearRatio); 
+    double rotationToMeters = SwerveUtil.getNeoRotationToMeters(mSpeedGearRatio); 
     double rpmToMetersPerSecond = rotationToMeters / 60.0;
     mSpeedEncoder.setPositionConversionFactor(rotationToMeters);
     mSpeedEncoder.setVelocityConversionFactor(rpmToMetersPerSecond);
@@ -276,7 +294,7 @@ public class SwerveModule extends SubsystemBase {
    * Dont think this is all too useful but it follows what is done with the speed so :)
    */
   private void updateAngleConversionFactor() {
-    double rotationToRadians = Conversion.getNeoRotationToMeters(mAngleGearRatio); 
+    double rotationToRadians = SwerveUtil.getNeoRotationToMeters(mAngleGearRatio); 
     double rpmToRadiansPerSecond = rotationToRadians / 60.0;
     mAngleEncoder.setPositionConversionFactor(rotationToRadians);
     mAngleEncoder.setVelocityConversionFactor(rpmToRadiansPerSecond);
@@ -286,7 +304,7 @@ public class SwerveModule extends SubsystemBase {
    * Updates the encoder on the SparkMax with the value on the AnalogEncoder
    */
   private void resetAngleEncoder() {
-    mAngleEncoder.setPosition(Conversion.analogInputToRadians(getAnalogInput()));
+    mAngleEncoder.setPosition(SwerveUtil.analogInputToRadians(getAnalogInput()));
   }
 
   /**
@@ -317,7 +335,7 @@ public class SwerveModule extends SubsystemBase {
       updateSpeedConversionFactor();
     }
     // If the drift between the Spark encoder and the absolute encoder is greater than 1 percent then reset 
-    if (Math.abs(getAngle() - Conversion.analogInputToRadians(getAnalogInput())) < ((2 * Math.PI) * 0.01)) {
+    if (Math.abs(getAngle() - SwerveUtil.analogInputToRadians(getAnalogInput())) < ((2 * Math.PI) * 0.01)) {
       resetAngleEncoder(); 
     }
 

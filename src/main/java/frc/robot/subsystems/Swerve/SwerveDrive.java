@@ -21,6 +21,7 @@ import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.util.LazySwerveModuleStateFactory;
 
 /**
  * Basic swerve drive 
@@ -35,6 +36,7 @@ public class SwerveDrive extends SubsystemBase {
   protected final SwerveModule[] mModules;
   private final AHRS mGyro;
   private final SwerveDriveKinematics mKinematics;
+  private final LazySwerveModuleStateFactory mModuleStateFactory;
   private final SwerveDrivePoseEstimator mOdometry;
   private final Timer mOdometryTimer;
 
@@ -45,9 +47,11 @@ public class SwerveDrive extends SubsystemBase {
   private final Field2d mField;
 
   private boolean mFieldCentricActive;
+  private Translation2d mPointOfRotation;
+
+  protected double mSpeedGearRatio;
   private double mMaxWheelSpeed;
   private double mMaxAngularVelocity;
-  private Translation2d mPointOfRotation;
 
   /**
    * A basic swerve drive 
@@ -71,6 +75,12 @@ public class SwerveDrive extends SubsystemBase {
 
     mPointOfRotation = new Translation2d(); // Default is 0.0
 
+    mSpeedGearRatio = 0.0; //TODO: Constants please
+    mMaxWheelSpeed = getMaxWheelSpeed();
+    mMaxAngularVelocity = getMaxAngularVelocity();
+
+    mModuleStateFactory = new LazySwerveModuleStateFactory(kinematics, getModuleStates(), mMaxWheelSpeed);
+
   }
 
   /**
@@ -80,10 +90,14 @@ public class SwerveDrive extends SubsystemBase {
    * @param rot Angular velocity
    */
   public void drive(double fwd, double str, double rot) {
+    // Clamps and scales inputs
     fwd = MathUtil.clamp(fwd, -1, 1) * mMaxWheelSpeed;
     str = MathUtil.clamp(str, -1, 1) * mMaxWheelSpeed;
     rot = MathUtil.clamp(rot, -1, 1) * mMaxAngularVelocity;
-    ChassisSpeeds speeds = new ChassisSpeeds(fwd, str, rot);
+
+    // Converts inputs into robot relative chassis speeds
+    ChassisSpeeds speeds = new ChassisSpeeds(fwd, str, rot); 
+    // If field centric is active convert robot relative chassis speeds into field relative speeds
     if (mFieldCentricActive) speeds = ChassisSpeeds.fromFieldRelativeSpeeds(speeds, getRotation2d());
     drive(speeds);
   }
@@ -93,7 +107,8 @@ public class SwerveDrive extends SubsystemBase {
    * @param speeds Desired chassis speeds
    */
   public void drive(ChassisSpeeds speeds) {
-    SwerveModuleState[] moduleStates = mKinematics.toSwerveModuleStates(speeds, mPointOfRotation);
+    SwerveModuleState[] moduleStates = mModuleStateFactory.generateModuleStates(speeds, mPointOfRotation);
+    // TODO: desaturate module states off of whatever that one thing jons talkin about
     SwerveDriveKinematics.desaturateWheelSpeeds(moduleStates, mMaxWheelSpeed);
     drive(speeds);
   }
@@ -122,6 +137,22 @@ public class SwerveDrive extends SubsystemBase {
    */
   public boolean getFieldCentric() {
     return mFieldCentricActive;
+  }
+
+  /**
+   * Gets theoretical max wheel speed of the drivetrain
+   * @return Max wheel speed of the drivetrain
+   */
+  private double getMaxWheelSpeed() {
+    return SwerveUtil.getNeoMaxWheelSpeed(mSpeedGearRatio);
+  }
+
+  /**
+   * Gets theoretical max angular velocity of the drivetrain
+   * @return Max angular velocity of the drivetrain
+   */
+  private double getMaxAngularVelocity() {
+    return SwerveUtil.getMaxAngularVelocity(getMaxWheelSpeed());
   }
 
   /**
