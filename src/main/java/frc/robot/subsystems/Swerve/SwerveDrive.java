@@ -21,7 +21,6 @@ import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.robot.util.LazySwerveModuleStateFactory;
 
 /**
  * Basic swerve drive 
@@ -36,7 +35,6 @@ public class SwerveDrive extends SubsystemBase {
   protected final SwerveModule[] mModules;
   private final AHRS mGyro;
   private final SwerveDriveKinematics mKinematics;
-  private final LazySwerveModuleStateFactory mModuleStateFactory;
   private final SwerveDrivePoseEstimator mOdometry;
   private final Timer mOdometryTimer;
 
@@ -48,6 +46,7 @@ public class SwerveDrive extends SubsystemBase {
 
   private boolean mFieldCentricActive;
   private Translation2d mPointOfRotation;
+  private SwerveModuleState[] mLastModuleStates;
 
   protected double mSpeedGearRatio;
   private double mMaxWheelSpeed;
@@ -73,13 +72,14 @@ public class SwerveDrive extends SubsystemBase {
 
     mField = new Field2d();
 
+    mFieldCentricActive = true; // Default is true
     mPointOfRotation = new Translation2d(); // Default is 0.0
+
+    mLastModuleStates = getModuleStates();
 
     mSpeedGearRatio = 0.0; //TODO: Constants please
     mMaxWheelSpeed = getMaxWheelSpeed();
     mMaxAngularVelocity = getMaxAngularVelocity();
-
-    mModuleStateFactory = new LazySwerveModuleStateFactory(kinematics, getModuleStates(), mMaxWheelSpeed);
 
   }
 
@@ -107,7 +107,7 @@ public class SwerveDrive extends SubsystemBase {
    * @param speeds Desired chassis speeds
    */
   public void drive(ChassisSpeeds speeds) {
-    SwerveModuleState[] moduleStates = mModuleStateFactory.generateModuleStates(speeds, mPointOfRotation);
+    SwerveModuleState[] moduleStates = mKinematics.toSwerveModuleStates(speeds, mPointOfRotation);
     // TODO: desaturate module states off of whatever that one thing jons talkin about
     SwerveDriveKinematics.desaturateWheelSpeeds(moduleStates, mMaxWheelSpeed);
     drive(speeds);
@@ -119,8 +119,12 @@ public class SwerveDrive extends SubsystemBase {
    */
   public void drive(SwerveModuleState[] moduleStates) {
     for (int i = 0; i < moduleStates.length; i++) {
+      if (moduleStates[i].speedMetersPerSecond < mMaxWheelSpeed * 0.01) {
+        moduleStates[i].angle = mLastModuleStates[i].angle;
+      }
       mModules[i].setState(moduleStates[i]);
     }
+    mLastModuleStates = moduleStates;
   }
 
   /**
@@ -152,7 +156,7 @@ public class SwerveDrive extends SubsystemBase {
    * @return Max angular velocity of the drivetrain
    */
   private double getMaxAngularVelocity() {
-    return SwerveUtil.getMaxAngularVelocity(getMaxWheelSpeed());
+    return SwerveUtil.getMaxAngularVelocity(mMaxWheelSpeed);
   }
 
   /**
@@ -329,6 +333,10 @@ public class SwerveDrive extends SubsystemBase {
     // This method will be called once per scheduler run
     updateOdometry();
     mField.setRobotPose(getPose2d());
+    
+    // Updates max wheel speeds
+    mMaxWheelSpeed = getMaxWheelSpeed();
+    mMaxAngularVelocity = getMaxAngularVelocity();
 
   }
 }

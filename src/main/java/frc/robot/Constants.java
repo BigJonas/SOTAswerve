@@ -32,6 +32,10 @@ public final class Constants {
     public static final double WHEEL_CIRCUMFERENCE = WHEEL_DIAMETER * Math.PI;
   }
 
+  public static class SparkMax {
+    public static final double PID_PERIOD = 0.001;
+  }
+
   public static class Neo {
     public static final double COUNTS_PER_REVOLUTION = 48.0;
     public static final double FREE_SPEED = 5820;
