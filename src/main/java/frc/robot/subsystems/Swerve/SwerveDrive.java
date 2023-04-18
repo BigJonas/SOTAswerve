@@ -32,7 +32,7 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
  * on start with an auto initial pose
  */
 public class SwerveDrive extends SubsystemBase {
-  protected final SwerveModule[] mModules;
+  protected final SwerveModule[] mModules; // Protected so that childeren can use the module also
   private final AHRS mGyro;
   private final SwerveDriveKinematics mKinematics;
   private final SwerveDrivePoseEstimator mOdometry;
@@ -48,7 +48,7 @@ public class SwerveDrive extends SubsystemBase {
   private Translation2d mPointOfRotation;
   private SwerveModuleState[] mLastModuleStates;
 
-  protected double mSpeedGearRatio;
+  protected double mSpeedGearRatio; // Protected so that childeren can change the speed gear ratio how they please
   private double mMaxWheelSpeed;
   private double mMaxAngularVelocity;
 
