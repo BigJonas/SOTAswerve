@@ -12,19 +12,18 @@ import com.revrobotics.CANSparkMax.ControlType;
 import com.revrobotics.SparkMaxPIDController.ArbFFUnits;
 
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.controller.SimpleMotorFeedforward;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.math.trajectory.TrapezoidProfile.Constraints;
-import edu.wpi.first.math.trajectory.TrapezoidProfile.State;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 import static frc.robot.Constants.AnalogInput.*;
-import static frc.robot.Constants.SparkMax.*;
 
 /**
  * Swerve Module using Neos for Drive and Angling
@@ -50,7 +49,7 @@ public class SwerveModule extends SubsystemBase {
   private final AnalogInput mAnalogInput;
 
   private final SparkMaxPIDController mAnglePID; // Measurement in Radians
-  private final Constraints mAngleConstraints; // Constraints used in creating trapezoid profiles
+  private final ProfiledPIDController mAngleTrapezoidProfile; // Used only for trapezoid profile feature
   private final SimpleMotorFeedforward mAngleFF; // Characterize in RPS (still goofy)
 
   private double mSpeedGearRatio;
@@ -75,7 +74,8 @@ public class SwerveModule extends SubsystemBase {
     mAnalogInput = analogInput;
 
     mAnglePID = mAngleMotor.getPIDController();
-    mAngleConstraints = new Constraints(0.0, 0.0); // TODO: blah blah get constants
+    mAngleTrapezoidProfile = new ProfiledPIDController(0.0, 0.0, 0.0, new Constraints(0.0, 0.0)); // TODO: Constants blah blah
+    mAngleTrapezoidProfile.enableContinuousInput(0.0, 2 * Math.PI);
     mAngleFF = new SimpleMotorFeedforward(0.0, 0.0, 0.0); // TODO: guess whhat make constants
 
     mSpeedGearRatio = 0.0; // TODO: make constants
@@ -93,19 +93,8 @@ public class SwerveModule extends SubsystemBase {
    */
   public void setState(SwerveModuleState desiredState) {
     desiredState = SwerveModuleState.optimize(desiredState, getRotation());
-    // Dont change angle when speed is less than 1 percent
-    // Extracted into LazySwerveModuleState
-    // if (Math.abs(desiredState.speedMetersPerSecond) <= getMaxWheelSpeed() * 0.01) {
-    //   desiredState.angle = mLastAngle;
-    // }
     setSpeed(desiredState.speedMetersPerSecond);
-    // setAngle(desiredState.angle.getRadians());
-    TrapezoidProfile motionProfile = new TrapezoidProfile(
-      mAngleConstraints, 
-      new State(desiredState.angle.getRadians(), 0.0),
-      new State(getAngle(), getAngleVelocity())
-    );
-    setAngle(motionProfile);
+    setAngle(desiredState.angle.getRadians());
   }
 
   /**
@@ -145,39 +134,15 @@ public class SwerveModule extends SubsystemBase {
    * @param positionProfile Position profile
    */
   public void setAngle(double radians) {
-    // TrapezoidProfile positionProfile = new TrapezoidProfile(
-    //   mAngleConstraints, 
-    //   new State(radians, 0.0), 
-    //   new State(getAngle(), getAngleVelocity())
-    // );
-    // State angleState = positionProfile.calculate(PID_PERIOD); // Gets the velocity setpoint for the next Spark PID update
-    // // For the feedforward it gets the setpoint at the time the PID updates functionally the same how hayden coded it
-    // mAnglePID.setReference(
-    //   radians, 
-    //   ControlType.kPosition, 
-    //   0, 
-    //   mAngleFF.calculate(angleState.velocity)
-    // );
+    mAngleTrapezoidProfile.calculate(getAngle(), radians);
+    TrapezoidProfile.State state = mAngleTrapezoidProfile.getSetpoint();
+    radians = state.position; // Sets radians setpoint to follow 
+    double radiansPerSecond = state.velocity;
     mAnglePID.setReference(
       radians, 
       ControlType.kPosition, 
-      0
-    );
-  }
-
-  /**
-   * Sets angle based off a trapezoid motion profile
-   * @param motionProfile Desired motion profile of the angle
-   */
-  public void setAngle(TrapezoidProfile motionProfile) {
-    double anglePosition = motionProfile.calculate(PID_PERIOD).position; // Radians
-    double angleVelocity = motionProfile.calculate(PID_PERIOD).velocity; // Radians per second
-    double angleVelocityNext = motionProfile.calculate(PID_PERIOD + PID_PERIOD).velocity; // Next setpoint 
-    mAnglePID.setReference(
-      anglePosition,  // Consider using angleState.position for adhering more to Trapezoid profile, testing required
-      ControlType.kPosition, // If you do the change above use ControlType.kPosition to match it
       0,
-      mAngleFF.calculate(angleVelocity, angleVelocityNext, PID_PERIOD), // models ff off accel 
+      mAngleFF.calculate(radiansPerSecond),
       ArbFFUnits.kVoltage
     );
   }
@@ -277,10 +242,16 @@ public class SwerveModule extends SubsystemBase {
     mSpeedPID.setD(0.0);
     mSpeedPID.setFF(0.0); // This is essentially KS in simple motor FF up to you to use it 
 
+    mSpeedPID.setIZone(0.0);
+    mSpeedPID.setIMaxAccum(0.0, 0); // Why does this one have mandatory maxAccum
+
     mAnglePID.setP(0.0);
     mAnglePID.setI(0.0);
     mAnglePID.setD(0.0);
     mAnglePID.setFF(0.0); // This is essentially KS in simple motor FF up to you to use it 
+    
+    mSpeedPID.setIZone(0.0);
+    mSpeedPID.setIMaxAccum(0.0, 0); // Why does this one have mandatory maxAccum
     
     mAnglePID.setPositionPIDWrappingEnabled(true);
     mAnglePID.setPositionPIDWrappingMinInput(0.0);
