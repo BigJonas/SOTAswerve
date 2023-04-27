@@ -13,6 +13,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.geometry.Twist2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
@@ -21,6 +22,8 @@ import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants.RoboRio;
+import frc.robot.util.GeometryUtils;
 
 /**
  * Basic swerve drive 
@@ -99,6 +102,7 @@ public class SwerveDrive extends SubsystemBase {
     ChassisSpeeds speeds = new ChassisSpeeds(fwd, str, rot); 
     // If field centric is active convert robot relative chassis speeds into field relative speeds
     if (mFieldCentricActive) speeds = ChassisSpeeds.fromFieldRelativeSpeeds(speeds, getRotation2d());
+    speeds = adjustChassisSpeeds(speeds);
     drive(speeds);
   }
 
@@ -125,6 +129,29 @@ public class SwerveDrive extends SubsystemBase {
       mModules[i].setState(moduleStates[i]);
     }
     mLastModuleStates = moduleStates;
+  }
+
+  /**
+   * Adjusts the chassis speeds to account for drift while rotating
+   * Borrowed from 254 
+   * https://www.chiefdelphi.com/t/whitepaper-swerve-drive-skew-and-second-order-kinematics/416964/5
+   * @param originalSpeeds Original chassis speeds
+   * @return Adjusted chassis speeds
+   */
+  private ChassisSpeeds adjustChassisSpeeds(ChassisSpeeds originalSpeeds) {
+    Pose2d drivePose_vel = new Pose2d(
+      originalSpeeds.vxMetersPerSecond * RoboRio.PERIOD, 
+      originalSpeeds.vyMetersPerSecond * RoboRio.PERIOD,
+      Rotation2d.fromRadians(originalSpeeds.omegaRadiansPerSecond * RoboRio.PERIOD)
+    );
+    Twist2d twist_vel = GeometryUtils.log(drivePose_vel);
+    ChassisSpeeds adjustedChassisSpeeds = new ChassisSpeeds(
+      twist_vel.dx / RoboRio.PERIOD,
+      twist_vel.dy / RoboRio.PERIOD,
+      twist_vel.dtheta / RoboRio.PERIOD
+    );  
+
+    return adjustedChassisSpeeds;
   }
 
   /**

@@ -340,4 +340,5 @@ public class SwerveModule extends SubsystemBase {
 
     mLastSpeedGearRatio = mSpeedGearRatio;
   }
+
 }

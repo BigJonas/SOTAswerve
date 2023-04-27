@@ -20,6 +20,10 @@ public final class Constants {
     public static final int kDriverControllerPort = 0;
   }
 
+  public static class RoboRio {
+    public static final double PERIOD = 0.02;
+  }
+
   public static class AnalogInput {
     public static final double COUNTS_PER_REVOLUTION = 5.0;
   }
